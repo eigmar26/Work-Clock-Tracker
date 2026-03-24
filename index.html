@@ -21,6 +21,14 @@
             background: rgba(15, 23, 42, 0.5);
             backdrop-filter: blur(4px);
         }
+        .sync-pulse {
+            animation: sync 2s infinite;
+        }
+        @keyframes sync {
+            0% { opacity: 1; }
+            50% { opacity: 0.4; }
+            100% { opacity: 1; }
+        }
     </style>
 </head>
 <body class="min-h-screen p-4 md:p-8">
@@ -33,6 +41,7 @@
             </h1>
             <div class="glass-card rounded-2xl p-3 shadow-sm border border-slate-200">
                 <div id="current-date" class="text-slate-600 font-bold text-sm uppercase tracking-wide"></div>
+                <div id="user-display" class="text-[10px] text-slate-400 mt-1 font-mono">Connecting...</div>
             </div>
         </header>
 
@@ -52,7 +61,7 @@
 
             <!-- Controls -->
             <div class="grid grid-cols-2 gap-3">
-                <button id="btn-punch-in" onclick="handlePunch('IN')" class="flex flex-col items-center justify-center p-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed">
+                <button id="btn-punch-in" onclick="handlePunch('IN')" disabled class="flex flex-col items-center justify-center p-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed">
                     <i data-lucide="log-in" class="mb-1"></i>
                     <span class="font-bold text-sm">Punch In</span>
                 </button>
@@ -105,6 +114,11 @@
                 </div>
             </div>
         </div>
+        
+        <div id="sync-status" class="text-center text-[10px] text-slate-400 flex items-center justify-center gap-1 pb-4">
+            <div class="w-1.5 h-1.5 rounded-full bg-slate-300"></div>
+            <span>Cloud Sync Offline</span>
+        </div>
     </div>
 
     <!-- Edit Modal -->
@@ -133,12 +147,29 @@
         </div>
     </div>
 
-    <script>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global Configuration
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'time-tracker-app';
+
+        // Local State
         let punches = [];
         let status = 'OUT';
         let editingIndex = null;
+        let currentUser = null;
 
+        // UI Elements
         const dateEl = document.getElementById('current-date');
+        const userDisplay = document.getElementById('user-display');
+        const syncStatus = document.getElementById('sync-status');
         const statusText = document.getElementById('status-text');
         const statusIndicator = document.getElementById('status-indicator');
         const punchLog = document.getElementById('punch-log');
@@ -149,17 +180,81 @@
         const targetBadge = document.getElementById('target-badge');
         const targetTimeDisplay = document.getElementById('target-time-display');
 
+        // Button Elements
+        const btnIn = document.getElementById('btn-punch-in');
+        const btnOut = document.getElementById('btn-punch-out');
+        const btnBreakStart = document.getElementById('btn-break-in');
+        const btnBreakEnd = document.getElementById('btn-break-out');
+
         lucide.createIcons();
 
-        function updateStaticDate() {
-            const now = new Date();
-            dateEl.textContent = now.toLocaleDateString('en-US', { 
-                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+        // 1. Initial Authentication
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.error("Auth failed", err);
+                syncStatus.querySelector('span').innerText = "Auth Error";
+            }
+        };
+
+        initAuth();
+
+        // 2. Auth Listener
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user) {
+                userDisplay.innerText = `User ID: ${user.uid}`;
+                syncStatus.querySelector('div').className = "w-1.5 h-1.5 rounded-full bg-emerald-500";
+                syncStatus.querySelector('span').innerText = "Cloud Sync Active";
+                setupDataListener(user.uid);
+            } else {
+                userDisplay.innerText = "Logged Out";
+                syncStatus.querySelector('div').className = "w-1.5 h-1.5 rounded-full bg-slate-300";
+                syncStatus.querySelector('span').innerText = "Cloud Sync Offline";
+            }
+        });
+
+        // 3. Firestore Listener (Real-time updates)
+        function setupDataListener(uid) {
+            const docRef = doc(db, 'artifacts', appId, 'users', uid, 'clock_data', 'current');
+            onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    punches = data.punches || [];
+                    status = data.status || 'OUT';
+                    updateUIFromData();
+                } else {
+                    // Start fresh if no cloud data
+                    punches = [];
+                    status = 'OUT';
+                    updateUIFromData();
+                }
+            }, (err) => {
+                console.error("Firestore Listen error:", err);
             });
         }
-        updateStaticDate();
 
-        function handlePunch(type) {
+        // 4. Persistence Logic
+        async function saveToCloud() {
+            if (!currentUser) return;
+            syncStatus.querySelector('div').classList.add('sync-pulse');
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'clock_data', 'current');
+                await setDoc(docRef, { punches, status });
+            } catch (err) {
+                console.error("Cloud Save failed:", err);
+            } finally {
+                setTimeout(() => syncStatus.querySelector('div').classList.remove('sync-pulse'), 1000);
+            }
+        }
+
+        // Logic Functions
+        window.handlePunch = function(type) {
             const now = new Date();
             const timestamp = now.getTime();
             
@@ -169,51 +264,51 @@
                 timeString: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
             });
             
-            updateState(type);
-            renderLog();
-            calculateTotals();
-            saveData();
+            status = determineNewStatus(type);
+            saveToCloud();
+        };
+
+        function determineNewStatus(type) {
+            if (type === 'IN') return 'WORKING';
+            if (type === 'BREAK_START') return 'ON_BREAK';
+            if (type === 'BREAK_END') return 'WORKING';
+            return 'OUT';
         }
 
-        function updateState(type) {
-            const btnIn = document.getElementById('btn-punch-in');
-            const btnOut = document.getElementById('btn-punch-out');
-            const btnBreakStart = document.getElementById('btn-break-in');
-            const btnBreakEnd = document.getElementById('btn-break-out');
+        function updateUIFromData() {
+            updateStaticDate();
+            updateControlStates();
+            renderLog();
+            calculateTotals();
+        }
 
+        function updateStaticDate() {
+            const now = new Date();
+            dateEl.textContent = now.toLocaleDateString('en-US', { 
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+            });
+        }
+
+        function updateControlStates() {
             statusIndicator.classList.remove('bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-slate-300');
 
-            switch(type) {
-                case 'IN':
-                    status = 'WORKING';
-                    statusText.innerText = 'Clocked In';
-                    statusText.className = 'text-xl font-bold text-emerald-600';
-                    statusIndicator.classList.add('bg-emerald-500');
-                    btnIn.disabled = true; btnOut.disabled = false; btnBreakStart.disabled = false; btnBreakEnd.disabled = true;
-                    targetBadge.classList.remove('hidden');
-                    break;
-                case 'BREAK_START':
-                    status = 'ON_BREAK';
-                    statusText.innerText = 'On Break';
-                    statusText.className = 'text-xl font-bold text-amber-600';
-                    statusIndicator.classList.add('bg-amber-500');
-                    btnBreakStart.disabled = true; btnBreakEnd.disabled = false; btnOut.disabled = true;
-                    break;
-                case 'BREAK_END':
-                    status = 'WORKING';
-                    statusText.innerText = 'Clocked In (Post-Break)';
-                    statusText.className = 'text-xl font-bold text-emerald-600';
-                    statusIndicator.classList.add('bg-emerald-500');
-                    btnBreakStart.disabled = false; btnBreakEnd.disabled = true; btnOut.disabled = false;
-                    break;
-                case 'OUT':
-                    status = 'OUT';
-                    statusText.innerText = 'Clocked Out';
-                    statusText.className = 'text-xl font-bold text-slate-700';
-                    statusIndicator.classList.add('bg-slate-300');
-                    btnIn.disabled = false; btnOut.disabled = true; btnBreakStart.disabled = true; btnBreakEnd.disabled = true;
-                    // Keep badge visible so they can see when they hit 8 hours even after clocking out
-                    break;
+            if (status === 'WORKING') {
+                statusText.innerText = 'Clocked In';
+                statusText.className = 'text-xl font-bold text-emerald-600';
+                statusIndicator.classList.add('bg-emerald-500');
+                btnIn.disabled = true; btnOut.disabled = false; btnBreakStart.disabled = false; btnBreakEnd.disabled = true;
+                targetBadge.classList.remove('hidden');
+            } else if (status === 'ON_BREAK') {
+                statusText.innerText = 'On Break';
+                statusText.className = 'text-xl font-bold text-amber-600';
+                statusIndicator.classList.add('bg-amber-500');
+                btnIn.disabled = true; btnOut.disabled = true; btnBreakStart.disabled = true; btnBreakEnd.disabled = false;
+                targetBadge.classList.remove('hidden');
+            } else {
+                statusText.innerText = 'Clocked Out';
+                statusText.className = 'text-xl font-bold text-slate-700';
+                statusIndicator.classList.add('bg-slate-300');
+                btnIn.disabled = false; btnOut.disabled = true; btnBreakStart.disabled = true; btnBreakEnd.disabled = true;
             }
         }
 
@@ -263,7 +358,7 @@
             lucide.createIcons();
         }
 
-        function openEditModal(index) {
+        window.openEditModal = function(index) {
             editingIndex = index;
             const punch = punches[index];
             modalPunchLabel.innerText = punch.type.replace('_', ' ');
@@ -271,14 +366,15 @@
             const formatted = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
             editTimeInput.value = formatted;
             editModal.classList.remove('hidden');
+            lucide.createIcons();
         }
 
-        function closeEditModal() {
+        window.closeEditModal = function() {
             editModal.classList.add('hidden');
             editingIndex = null;
         }
 
-        function saveEdit() {
+        window.saveEdit = function() {
             if (editingIndex === null) return;
             const newDate = new Date(editTimeInput.value);
             if (isNaN(newDate.getTime())) return;
@@ -288,9 +384,7 @@
             punches.sort((a, b) => a.timestamp - b.timestamp);
             
             closeEditModal();
-            renderLog();
-            calculateTotals();
-            saveData();
+            saveToCloud();
         }
 
         function calculateTotals() {
@@ -323,15 +417,11 @@
                 totalBreakMs += (now - lastBreakStart);
             }
 
-            // Target calculation: First In + 8 hours + Total Break Time
             if (firstIn) {
                 const eightHoursMs = 8 * 60 * 60 * 1000;
                 const targetTimestamp = firstIn + eightHoursMs + totalBreakMs;
                 const targetDate = new Date(targetTimestamp);
                 targetTimeDisplay.innerText = targetDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                targetBadge.classList.remove('hidden');
-            } else {
-                targetBadge.classList.add('hidden');
             }
 
             document.getElementById('total-work-time').innerText = formatHhMm(totalWorkMs);
@@ -348,54 +438,13 @@
             return `${h}h ${m}m`;
         }
 
-        function clearLog() {
-            if (confirm("Clear all punch data?")) {
+        window.clearLog = async function() {
+            if (confirm("Clear all punch data from the cloud?")) {
                 punches = [];
                 status = 'OUT';
-                updateState('OUT');
-                targetBadge.classList.add('hidden');
-                renderLog();
-                calculateTotals();
-                localStorage.removeItem('work_clock_data_v4');
+                await saveToCloud();
             }
         }
-
-        function saveData() {
-            localStorage.setItem('work_clock_data_v4', JSON.stringify({ punches, status }));
-        }
-
-        function loadData() {
-            const stored = localStorage.getItem('work_clock_data_v4');
-            if (stored) {
-                const data = JSON.parse(stored);
-                punches = data.punches;
-                status = data.status;
-                
-                const btnIn = document.getElementById('btn-punch-in');
-                const btnOut = document.getElementById('btn-punch-out');
-                const btnBreakStart = document.getElementById('btn-break-in');
-                const btnBreakEnd = document.getElementById('btn-break-out');
-                
-                if (status === 'WORKING') {
-                    statusText.innerText = 'Clocked In';
-                    statusText.className = 'text-xl font-bold text-emerald-600';
-                    statusIndicator.classList.add('bg-emerald-500');
-                    btnIn.disabled = true; btnOut.disabled = false; btnBreakStart.disabled = false; btnBreakEnd.disabled = true;
-                } else if (status === 'ON_BREAK') {
-                    statusText.innerText = 'On Break';
-                    statusText.className = 'text-xl font-bold text-amber-600';
-                    statusIndicator.classList.add('bg-amber-500');
-                    btnIn.disabled = true; btnOut.disabled = true; btnBreakStart.disabled = true; btnBreakEnd.disabled = false;
-                } else {
-                    updateState('OUT');
-                }
-                
-                renderLog();
-                calculateTotals();
-            }
-        }
-
-        window.onload = loadData;
     </script>
 </body>
 </html>
