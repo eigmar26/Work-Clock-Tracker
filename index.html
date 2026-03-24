@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Work Time Tracker</title>
+    <title>Work Clock tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
@@ -21,6 +21,11 @@
             background: rgba(15, 23, 42, 0.5);
             backdrop-filter: blur(4px);
         }
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
     </style>
 </head>
 <body class="min-h-screen p-4 md:p-8">
@@ -29,11 +34,18 @@
         <header class="text-center space-y-2">
             <h1 class="text-2xl font-bold text-slate-800 flex items-center justify-center gap-2">
                 <i data-lucide="wrench" class="text-blue-600"></i>
-                Shift Tracker
+                Work Clock tracker
             </h1>
             <div class="glass-card rounded-2xl p-3 shadow-sm border border-slate-200">
                 <div id="current-date" class="text-slate-600 font-bold text-sm uppercase tracking-wide"></div>
-                <div class="text-[10px] text-slate-400 mt-1 font-medium">Enterprise Maintenance Tool</div>
+                <div class="flex justify-center items-center gap-4 mt-2">
+                    <div class="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-lg border border-slate-200">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase leading-none">Rate:</span>
+                        <span class="text-xs font-bold text-slate-700">$</span>
+                        <input type="number" id="hourly-rate-input" onchange="saveSettings()" value="25" class="bg-transparent text-xs font-bold text-slate-700 w-10 focus:outline-none">
+                    </div>
+                    <div class="text-[10px] text-slate-400 font-medium">Enterprise Tech Tool</div>
+                </div>
             </div>
         </header>
 
@@ -72,7 +84,30 @@
             </div>
         </div>
 
-        <!-- Summary Statistics -->
+        <!-- Bi-Weekly Pay Period Summary -->
+        <div class="glass-card rounded-2xl p-5 shadow-sm border-l-4 border-l-indigo-500">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="calendar-check" class="w-4 h-4 text-indigo-500"></i>
+                    Bi-Weekly Pay Period
+                </h3>
+                <input type="date" id="pp-start-input" onchange="saveSettings()" class="text-[10px] font-bold text-slate-500 bg-slate-50 p-1 rounded border border-slate-200 focus:outline-none">
+            </div>
+            
+            <div class="grid grid-cols-2 gap-3 mb-4">
+                <div class="bg-indigo-50/50 p-3 rounded-xl border border-indigo-100">
+                    <p class="text-[9px] font-bold text-indigo-400 uppercase">Period Hours</p>
+                    <p id="pp-total-hours" class="text-lg font-black text-indigo-900">0.00</p>
+                </div>
+                <div class="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100">
+                    <p class="text-[9px] font-bold text-emerald-400 uppercase">Est. Gross Pay</p>
+                    <p id="pp-total-income" class="text-lg font-black text-emerald-900">$0.00</p>
+                </div>
+            </div>
+            <p id="pp-date-range" class="text-[10px] text-slate-400 text-center italic"></p>
+        </div>
+
+        <!-- Today's Stats -->
         <div id="summary-card" class="glass-card rounded-2xl p-5 shadow-sm space-y-4">
             <h3 class="font-bold text-slate-800 flex items-center gap-2">
                 <i data-lucide="bar-chart-3" class="w-4 h-4 text-blue-500"></i>
@@ -80,21 +115,17 @@
             </h3>
             <div class="grid grid-cols-2 gap-4">
                 <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <p class="text-[10px] font-bold text-slate-400 uppercase">Gross Work</p>
-                    <p id="total-work-time" class="text-lg font-bold text-slate-700">0h 00m</p>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase">Net Hours</p>
+                    <p id="today-net-hours" class="text-lg font-bold text-slate-700">0.00</p>
                 </div>
                 <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <p class="text-[10px] font-bold text-slate-400 uppercase">Total Breaks</p>
-                    <p id="total-break-time" class="text-lg font-bold text-slate-700 text-amber-600">0h 00m</p>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase">Today's Income</p>
+                    <p id="today-income" class="text-lg font-bold text-emerald-600">$0.00</p>
                 </div>
-            </div>
-            <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center">
-                <p class="font-bold text-blue-800">Net Payable Time</p>
-                <p id="net-total" class="text-2xl font-black text-blue-900 tracking-tight">0.00 hrs</p>
             </div>
         </div>
 
-        <!-- Log Controls & List -->
+        <!-- Log -->
         <div class="space-y-3">
             <div class="flex justify-between items-center px-1">
                 <h3 class="font-bold text-slate-600 text-sm uppercase tracking-tight">Punch Log</h3>
@@ -107,14 +138,14 @@
             </div>
             <div id="punch-log" class="space-y-2 pb-12">
                 <div id="empty-state" class="text-center py-8 text-slate-400 italic text-sm">
-                    No punches recorded for today yet.
+                    No punches recorded yet.
                 </div>
             </div>
         </div>
         
         <div class="text-center text-[10px] text-slate-400 flex items-center justify-center gap-1 pb-4">
             <div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-            <span>Auto-saving to browser</span>
+            <span>Encrypted local storage active</span>
         </div>
     </div>
 
@@ -148,6 +179,8 @@
         // State Management
         let punches = [];
         let status = 'OUT';
+        let hourlyRate = 25.00;
+        let payPeriodStart = ""; // Date string
         let editingIndex = null;
 
         // UI Elements
@@ -161,6 +194,8 @@
         const modalPunchLabel = document.getElementById('modal-punch-label');
         const targetBadge = document.getElementById('target-badge');
         const targetTimeDisplay = document.getElementById('target-time-display');
+        const rateInput = document.getElementById('hourly-rate-input');
+        const ppStartInput = document.getElementById('pp-start-input');
 
         const btnIn = document.getElementById('btn-punch-in');
         const btnOut = document.getElementById('btn-punch-out');
@@ -274,6 +309,127 @@
             lucide.createIcons();
         }
 
+        function calculateTotals() {
+            const now = new Date();
+            const todayStr = now.toLocaleDateString();
+            
+            let todayWorkMs = 0;
+            let periodWorkMs = 0;
+            
+            // Pay Period Logic
+            let ppStart = ppStartInput.value ? new Date(ppStartInput.value + 'T00:00:00') : null;
+            let ppEnd = null;
+            if (ppStart) {
+                // Find which bi-weekly period we are in
+                const dayDiff = Math.floor((now - ppStart) / (1000 * 60 * 60 * 24));
+                const periodIndex = Math.floor(dayDiff / 14);
+                
+                const actualPPStart = new Date(ppStart);
+                actualPPStart.setDate(ppStart.getDate() + (periodIndex * 14));
+                
+                const actualPPEnd = new Date(actualPPStart);
+                actualPPEnd.setDate(actualPPStart.getDate() + 13);
+                
+                ppStart = actualPPStart;
+                ppEnd = actualPPEnd;
+                
+                document.getElementById('pp-date-range').innerText = `${ppStart.toLocaleDateString()} - ${ppEnd.toLocaleDateString()}`;
+            }
+
+            // Group punches by shift pairs
+            let lastIn = null;
+            let lastBreakStart = null;
+            let firstInToday = null;
+            let totalBreaksToday = 0;
+
+            punches.forEach(p => {
+                const pDate = new Date(p.timestamp);
+                const isToday = pDate.toLocaleDateString() === todayStr;
+                const isInPeriod = ppStart && ppEnd && pDate >= ppStart && pDate <= (new Date(ppEnd).setHours(23,59,59));
+
+                if (p.type === 'IN') {
+                    lastIn = p.timestamp;
+                    if (isToday && !firstInToday) firstInToday = p.timestamp;
+                } else if (p.type === 'OUT' && lastIn) {
+                    const duration = p.timestamp - lastIn;
+                    if (isToday) todayWorkMs += duration;
+                    if (isInPeriod) periodWorkMs += duration;
+                    lastIn = null;
+                } else if (p.type === 'BREAK_START' && lastIn) {
+                    lastBreakStart = p.timestamp;
+                } else if (p.type === 'BREAK_END' && lastBreakStart) {
+                    const breakDur = p.timestamp - lastBreakStart;
+                    if (isToday) {
+                        todayWorkMs -= breakDur;
+                        totalBreaksToday += breakDur;
+                    }
+                    if (isInPeriod) periodWorkMs -= breakDur;
+                    lastBreakStart = null;
+                }
+            });
+
+            // Handle active timers for live viewing
+            if (lastIn) {
+                const liveDuration = now.getTime() - lastIn;
+                const isToday = new Date(lastIn).toLocaleDateString() === todayStr;
+                const isInPeriod = ppStart && ppEnd && new Date(lastIn) >= ppStart;
+                
+                if (isToday && status !== 'OUT') todayWorkMs += liveDuration;
+                if (isInPeriod && status !== 'OUT') periodWorkMs += liveDuration;
+
+                if (lastBreakStart && status === 'ON_BREAK') {
+                    const liveBreak = now.getTime() - lastBreakStart;
+                    if (isToday) todayWorkMs -= liveBreak;
+                    if (isInPeriod) periodWorkMs -= liveBreak;
+                }
+            }
+
+            // Update Target Badge
+            if (firstInToday && status !== 'OUT') {
+                const eightHoursMs = 8 * 60 * 60 * 1000;
+                const targetTimestamp = firstInToday + eightHoursMs + totalBreaksToday;
+                const targetDate = new Date(targetTimestamp);
+                targetTimeDisplay.innerText = targetDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            }
+
+            // Calculations
+            const todayHours = Math.max(0, todayWorkMs / 3600000);
+            const periodHours = Math.max(0, periodWorkMs / 3600000);
+            const rate = parseFloat(rateInput.value) || 0;
+
+            document.getElementById('today-net-hours').innerText = todayHours.toFixed(2);
+            document.getElementById('today-income').innerText = '$' + (todayHours * rate).toFixed(2);
+            
+            document.getElementById('pp-total-hours').innerText = periodHours.toFixed(2);
+            document.getElementById('pp-total-income').innerText = '$' + (periodHours * rate).toFixed(2);
+        }
+
+        // Settings persistence
+        function saveSettings() {
+            hourlyRate = parseFloat(rateInput.value) || 25;
+            payPeriodStart = ppStartInput.value;
+            calculateTotals();
+            saveData();
+        }
+
+        function saveData() {
+            const data = { punches, status, hourlyRate, payPeriodStart };
+            localStorage.setItem('enterprise_clock_v5', JSON.stringify(data));
+        }
+
+        function loadData() {
+            const stored = localStorage.getItem('enterprise_clock_v5');
+            if (stored) {
+                const data = JSON.parse(stored);
+                punches = data.punches || [];
+                status = data.status || 'OUT';
+                rateInput.value = data.hourlyRate || 25;
+                ppStartInput.value = data.payPeriodStart || "";
+                updateUI();
+            }
+        }
+
+        // Standard Modal Functions
         window.openEditModal = function(index) {
             editingIndex = index;
             const punch = punches[index];
@@ -282,7 +438,6 @@
             const formatted = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
             editTimeInput.value = formatted;
             editModal.classList.remove('hidden');
-            lucide.createIcons();
         }
 
         window.closeEditModal = function() {
@@ -294,108 +449,39 @@
             if (editingIndex === null) return;
             const newDate = new Date(editTimeInput.value);
             if (isNaN(newDate.getTime())) return;
-
             punches[editingIndex].timestamp = newDate.getTime();
             punches[editingIndex].timeString = newDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
             punches.sort((a, b) => a.timestamp - b.timestamp);
-            
             closeEditModal();
             updateUI();
             saveData();
         }
 
-        function calculateTotals() {
-            let totalWorkMs = 0;
-            let totalBreakMs = 0;
-            let firstIn = null;
-            let lastIn = null;
-            let lastBreakStart = null;
-
-            punches.forEach(p => {
-                if (p.type === 'IN') {
-                    if (firstIn === null) firstIn = p.timestamp;
-                    lastIn = p.timestamp;
-                } else if (p.type === 'OUT' && lastIn) {
-                    totalWorkMs += (p.timestamp - lastIn);
-                    lastIn = null;
-                } else if (p.type === 'BREAK_START' && lastIn) {
-                    lastBreakStart = p.timestamp;
-                } else if (p.type === 'BREAK_END' && lastBreakStart) {
-                    totalBreakMs += (p.timestamp - lastBreakStart);
-                    lastBreakStart = null;
-                }
-            });
-
-            const now = new Date().getTime();
-            if (lastIn && status !== 'OUT') {
-                totalWorkMs += (now - lastIn);
-            }
-            if (lastBreakStart && status === 'ON_BREAK') {
-                totalBreakMs += (now - lastBreakStart);
-            }
-
-            if (firstIn) {
-                const eightHoursMs = 8 * 60 * 60 * 1000;
-                const targetTimestamp = firstIn + eightHoursMs + totalBreakMs;
-                const targetDate = new Date(targetTimestamp);
-                targetTimeDisplay.innerText = targetDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-            }
-
-            document.getElementById('total-work-time').innerText = formatHhMm(totalWorkMs);
-            document.getElementById('total-break-time').innerText = formatHhMm(totalBreakMs);
-
-            const netMs = totalWorkMs - totalBreakMs;
-            const netHours = Math.max(0, netMs / (1000 * 60 * 60));
-            document.getElementById('net-total').innerText = netHours.toFixed(2) + ' hrs';
-        }
-
-        function formatHhMm(ms) {
-            const h = Math.floor(ms / 3600000);
-            const m = Math.floor((ms % 3600000) / 60000);
-            return `${h}h ${m}m`;
-        }
-
         function exportToCSV() {
             if (punches.length === 0) return;
-            let csvContent = "Date,Type,Time\n";
+            let csvContent = "Date,Type,Time,Unix\n";
             punches.forEach(p => {
                 const d = new Date(p.timestamp).toLocaleDateString();
-                csvContent += `${d},${p.type},${p.timeString}\n`;
+                csvContent += `${d},${p.type},${p.timeString},${p.timestamp}\n`;
             });
             const blob = new Blob([csvContent], { type: 'text/csv' });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.setAttribute('hidden', '');
-            a.setAttribute('href', url);
-            a.setAttribute('download', `work_log_${new Date().toISOString().slice(0,10)}.csv`);
-            document.body.appendChild(a);
+            a.href = url;
+            a.download = `work_log_${new Date().toISOString().slice(0,10)}.csv`;
             a.click();
-            document.body.removeChild(a);
         }
 
         function clearLog() {
-            if (confirm("Clear all punch data from this device?")) {
+            if (confirm("Clear all shift history? This cannot be undone.")) {
                 punches = [];
                 status = 'OUT';
                 updateUI();
-                localStorage.removeItem('free_personal_clock_data');
+                saveData();
             }
         }
 
-        function saveData() {
-            localStorage.setItem('free_personal_clock_data', JSON.stringify({ punches, status }));
-        }
-
-        function loadData() {
-            const stored = localStorage.getItem('free_personal_clock_data');
-            if (stored) {
-                const data = JSON.parse(stored);
-                punches = data.punches || [];
-                status = data.status || 'OUT';
-                updateUI();
-            }
-        }
-
+        setInterval(calculateTotals, 30000); // Update every 30s for live income tracking
         window.onload = loadData;
     </script>
 </body>
