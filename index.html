@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Work Time Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+        }
+        .modal-backdrop {
+            background: rgba(15, 23, 42, 0.5);
+            backdrop-filter: blur(4px);
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+    <div class="max-w-md mx-auto space-y-6">
+        <!-- Header -->
+        <header class="text-center space-y-2">
+            <h1 class="text-2xl font-bold text-slate-800 flex items-center justify-center gap-2">
+                <i data-lucide="wrench" class="text-blue-600"></i>
+                Shift Tracker
+            </h1>
+            <div class="glass-card rounded-2xl p-3 shadow-sm border border-slate-200">
+                <div id="current-date" class="text-slate-600 font-bold text-sm uppercase tracking-wide"></div>
+            </div>
+        </header>
+
+        <!-- Status Card -->
+        <div class="glass-card rounded-3xl p-6 shadow-lg relative overflow-hidden">
+            <div id="status-indicator" class="absolute top-0 left-0 w-1 h-full bg-slate-300 transition-colors duration-300"></div>
+            <div class="flex justify-between items-start mb-6">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Current Status</p>
+                    <h2 id="status-text" class="text-xl font-bold text-slate-700">Clocked Out</h2>
+                </div>
+                <div id="target-badge" class="hidden text-right bg-blue-50 border border-blue-100 px-3 py-1 rounded-full">
+                    <p class="text-[9px] font-black text-blue-400 uppercase leading-tight">8-Hr Target</p>
+                    <p id="target-time-display" class="text-xs font-bold text-blue-700">--:--</p>
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="grid grid-cols-2 gap-3">
+                <button id="btn-punch-in" onclick="handlePunch('IN')" class="flex flex-col items-center justify-center p-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed">
+                    <i data-lucide="log-in" class="mb-1"></i>
+                    <span class="font-bold text-sm">Punch In</span>
+                </button>
+                <button id="btn-punch-out" onclick="handlePunch('OUT')" disabled class="flex flex-col items-center justify-center p-4 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed">
+                    <i data-lucide="log-out" class="mb-1"></i>
+                    <span class="font-bold text-sm">Punch Out</span>
+                </button>
+                <button id="btn-break-in" onclick="handlePunch('BREAK_START')" disabled class="flex flex-col items-center justify-center p-4 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed">
+                    <i data-lucide="coffee" class="mb-1"></i>
+                    <span class="font-bold text-sm">Start Break</span>
+                </button>
+                <button id="btn-break-out" onclick="handlePunch('BREAK_END')" disabled class="flex flex-col items-center justify-center p-4 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed">
+                    <i data-lucide="play" class="mb-1"></i>
+                    <span class="font-bold text-sm">End Break</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Summary Statistics -->
+        <div id="summary-card" class="glass-card rounded-2xl p-5 shadow-sm space-y-4">
+            <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                <i data-lucide="bar-chart-3" class="w-4 h-4 text-blue-500"></i>
+                Today's Totals
+            </h3>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase">Gross Work</p>
+                    <p id="total-work-time" class="text-lg font-bold text-slate-700">0h 00m</p>
+                </div>
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase">Total Breaks</p>
+                    <p id="total-break-time" class="text-lg font-bold text-slate-700 text-amber-600">0h 00m</p>
+                </div>
+            </div>
+            <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 flex justify-between items-center">
+                <p class="font-bold text-blue-800">Net Payable Time</p>
+                <p id="net-total" class="text-2xl font-black text-blue-900 tracking-tight">0.00 hrs</p>
+            </div>
+        </div>
+
+        <!-- Log -->
+        <div class="space-y-3">
+            <div class="flex justify-between items-center px-1">
+                <h3 class="font-bold text-slate-600 text-sm uppercase tracking-tight">Punch Log</h3>
+                <button onclick="clearLog()" class="text-xs text-rose-500 hover:underline font-medium">Clear All</button>
+            </div>
+            <div id="punch-log" class="space-y-2 pb-12">
+                <div id="empty-state" class="text-center py-8 text-slate-400 italic text-sm">
+                    No punches recorded for today yet.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="edit-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 modal-backdrop">
+        <div class="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-6">
+            <div class="flex justify-between items-center">
+                <h3 class="text-lg font-bold text-slate-800">Edit Punch Time</h3>
+                <button onclick="closeEditModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Punch Type</label>
+                    <div id="modal-punch-label" class="text-sm font-bold text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-100 italic"></div>
+                </div>
+                <div>
+                    <label for="edit-time-input" class="block text-xs font-bold text-slate-400 uppercase mb-1">New Time</label>
+                    <input type="datetime-local" id="edit-time-input" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="closeEditModal()" class="flex-1 py-3 px-4 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition-colors">Cancel</button>
+                <button onclick="saveEdit()" class="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-200 transition-colors">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let punches = [];
+        let status = 'OUT';
+        let editingIndex = null;
+
+        const dateEl = document.getElementById('current-date');
+        const statusText = document.getElementById('status-text');
+        const statusIndicator = document.getElementById('status-indicator');
+        const punchLog = document.getElementById('punch-log');
+        const emptyState = document.getElementById('empty-state');
+        const editModal = document.getElementById('edit-modal');
+        const editTimeInput = document.getElementById('edit-time-input');
+        const modalPunchLabel = document.getElementById('modal-punch-label');
+        const targetBadge = document.getElementById('target-badge');
+        const targetTimeDisplay = document.getElementById('target-time-display');
+
+        lucide.createIcons();
+
+        function updateStaticDate() {
+            const now = new Date();
+            dateEl.textContent = now.toLocaleDateString('en-US', { 
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+            });
+        }
+        updateStaticDate();
+
+        function handlePunch(type) {
+            const now = new Date();
+            const timestamp = now.getTime();
+            
+            punches.push({ 
+                type, 
+                timestamp,
+                timeString: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+            });
+            
+            updateState(type);
+            renderLog();
+            calculateTotals();
+            saveData();
+        }
+
+        function updateState(type) {
+            const btnIn = document.getElementById('btn-punch-in');
+            const btnOut = document.getElementById('btn-punch-out');
+            const btnBreakStart = document.getElementById('btn-break-in');
+            const btnBreakEnd = document.getElementById('btn-break-out');
+
+            statusIndicator.classList.remove('bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-slate-300');
+
+            switch(type) {
+                case 'IN':
+                    status = 'WORKING';
+                    statusText.innerText = 'Clocked In';
+                    statusText.className = 'text-xl font-bold text-emerald-600';
+                    statusIndicator.classList.add('bg-emerald-500');
+                    btnIn.disabled = true; btnOut.disabled = false; btnBreakStart.disabled = false; btnBreakEnd.disabled = true;
+                    targetBadge.classList.remove('hidden');
+                    break;
+                case 'BREAK_START':
+                    status = 'ON_BREAK';
+                    statusText.innerText = 'On Break';
+                    statusText.className = 'text-xl font-bold text-amber-600';
+                    statusIndicator.classList.add('bg-amber-500');
+                    btnBreakStart.disabled = true; btnBreakEnd.disabled = false; btnOut.disabled = true;
+                    break;
+                case 'BREAK_END':
+                    status = 'WORKING';
+                    statusText.innerText = 'Clocked In (Post-Break)';
+                    statusText.className = 'text-xl font-bold text-emerald-600';
+                    statusIndicator.classList.add('bg-emerald-500');
+                    btnBreakStart.disabled = false; btnBreakEnd.disabled = true; btnOut.disabled = false;
+                    break;
+                case 'OUT':
+                    status = 'OUT';
+                    statusText.innerText = 'Clocked Out';
+                    statusText.className = 'text-xl font-bold text-slate-700';
+                    statusIndicator.classList.add('bg-slate-300');
+                    btnIn.disabled = false; btnOut.disabled = true; btnBreakStart.disabled = true; btnBreakEnd.disabled = true;
+                    // Keep badge visible so they can see when they hit 8 hours even after clocking out
+                    break;
+            }
+        }
+
+        function renderLog() {
+            if (punches.length === 0) {
+                emptyState.classList.remove('hidden');
+                punchLog.innerHTML = '';
+                punchLog.appendChild(emptyState);
+                return;
+            }
+            
+            emptyState.classList.add('hidden');
+            const items = punches.map((p, index) => {
+                let colorClass = 'text-slate-600';
+                let icon = 'clock';
+                let label = p.type;
+
+                if (p.type === 'IN') { colorClass = 'text-emerald-600'; icon = 'log-in'; label = 'Clocked In'; }
+                if (p.type === 'OUT') { colorClass = 'text-rose-600'; icon = 'log-out'; label = 'Clocked Out'; }
+                if (p.type === 'BREAK_START') { colorClass = 'text-amber-600'; icon = 'coffee'; label = 'Break Start'; }
+                if (p.type === 'BREAK_END') { colorClass = 'text-sky-600'; icon = 'play'; label = 'Break End'; }
+
+                return `
+                    <div class="flex items-center justify-between p-3 bg-white rounded-xl shadow-sm border border-slate-100 group">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 rounded-lg bg-slate-50 ${colorClass}">
+                                <i data-lucide="${icon}" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <p class="text-sm font-bold text-slate-800">${label}</p>
+                                <p class="text-[10px] text-slate-400 font-medium">${new Date(p.timestamp).toLocaleDateString()}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <div class="text-right">
+                                <p class="text-sm font-mono font-bold text-slate-700">${p.timeString}</p>
+                            </div>
+                            <button onclick="openEditModal(${index})" class="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all">
+                                <i data-lucide="pencil" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).reverse().join('');
+            
+            punchLog.innerHTML = items;
+            lucide.createIcons();
+        }
+
+        function openEditModal(index) {
+            editingIndex = index;
+            const punch = punches[index];
+            modalPunchLabel.innerText = punch.type.replace('_', ' ');
+            const date = new Date(punch.timestamp);
+            const formatted = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+            editTimeInput.value = formatted;
+            editModal.classList.remove('hidden');
+        }
+
+        function closeEditModal() {
+            editModal.classList.add('hidden');
+            editingIndex = null;
+        }
+
+        function saveEdit() {
+            if (editingIndex === null) return;
+            const newDate = new Date(editTimeInput.value);
+            if (isNaN(newDate.getTime())) return;
+
+            punches[editingIndex].timestamp = newDate.getTime();
+            punches[editingIndex].timeString = newDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            punches.sort((a, b) => a.timestamp - b.timestamp);
+            
+            closeEditModal();
+            renderLog();
+            calculateTotals();
+            saveData();
+        }
+
+        function calculateTotals() {
+            let totalWorkMs = 0;
+            let totalBreakMs = 0;
+            let firstIn = null;
+            let lastIn = null;
+            let lastBreakStart = null;
+
+            punches.forEach(p => {
+                if (p.type === 'IN') {
+                    if (firstIn === null) firstIn = p.timestamp;
+                    lastIn = p.timestamp;
+                } else if (p.type === 'OUT' && lastIn) {
+                    totalWorkMs += (p.timestamp - lastIn);
+                    lastIn = null;
+                } else if (p.type === 'BREAK_START' && lastIn) {
+                    lastBreakStart = p.timestamp;
+                } else if (p.type === 'BREAK_END' && lastBreakStart) {
+                    totalBreakMs += (p.timestamp - lastBreakStart);
+                    lastBreakStart = null;
+                }
+            });
+
+            const now = new Date().getTime();
+            if (lastIn && status !== 'OUT') {
+                totalWorkMs += (now - lastIn);
+            }
+            if (lastBreakStart && status === 'ON_BREAK') {
+                totalBreakMs += (now - lastBreakStart);
+            }
+
+            // Target calculation: First In + 8 hours + Total Break Time
+            if (firstIn) {
+                const eightHoursMs = 8 * 60 * 60 * 1000;
+                const targetTimestamp = firstIn + eightHoursMs + totalBreakMs;
+                const targetDate = new Date(targetTimestamp);
+                targetTimeDisplay.innerText = targetDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                targetBadge.classList.remove('hidden');
+            } else {
+                targetBadge.classList.add('hidden');
+            }
+
+            document.getElementById('total-work-time').innerText = formatHhMm(totalWorkMs);
+            document.getElementById('total-break-time').innerText = formatHhMm(totalBreakMs);
+
+            const netMs = totalWorkMs - totalBreakMs;
+            const netHours = Math.max(0, netMs / (1000 * 60 * 60));
+            document.getElementById('net-total').innerText = netHours.toFixed(2) + ' hrs';
+        }
+
+        function formatHhMm(ms) {
+            const h = Math.floor(ms / 3600000);
+            const m = Math.floor((ms % 3600000) / 60000);
+            return `${h}h ${m}m`;
+        }
+
+        function clearLog() {
+            if (confirm("Clear all punch data?")) {
+                punches = [];
+                status = 'OUT';
+                updateState('OUT');
+                targetBadge.classList.add('hidden');
+                renderLog();
+                calculateTotals();
+                localStorage.removeItem('work_clock_data_v4');
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem('work_clock_data_v4', JSON.stringify({ punches, status }));
+        }
+
+        function loadData() {
+            const stored = localStorage.getItem('work_clock_data_v4');
+            if (stored) {
+                const data = JSON.parse(stored);
+                punches = data.punches;
+                status = data.status;
+                
+                const btnIn = document.getElementById('btn-punch-in');
+                const btnOut = document.getElementById('btn-punch-out');
+                const btnBreakStart = document.getElementById('btn-break-in');
+                const btnBreakEnd = document.getElementById('btn-break-out');
+                
+                if (status === 'WORKING') {
+                    statusText.innerText = 'Clocked In';
+                    statusText.className = 'text-xl font-bold text-emerald-600';
+                    statusIndicator.classList.add('bg-emerald-500');
+                    btnIn.disabled = true; btnOut.disabled = false; btnBreakStart.disabled = false; btnBreakEnd.disabled = true;
+                } else if (status === 'ON_BREAK') {
+                    statusText.innerText = 'On Break';
+                    statusText.className = 'text-xl font-bold text-amber-600';
+                    statusIndicator.classList.add('bg-amber-500');
+                    btnIn.disabled = true; btnOut.disabled = true; btnBreakStart.disabled = true; btnBreakEnd.disabled = false;
+                } else {
+                    updateState('OUT');
+                }
+                
+                renderLog();
+                calculateTotals();
+            }
+        }
+
+        window.onload = loadData;
+    </script>
+</body>
+</html>
